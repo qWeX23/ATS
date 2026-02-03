@@ -16,6 +16,10 @@ structured logging.
 - Go 1.22+
 - Alpaca API credentials for paper mode (env vars `APCA_API_KEY_ID`, `APCA_API_SECRET_KEY`)
 
+## .env support
+If a `.env` file is present in the repo root, the bot will load missing environment variables from it.
+Existing environment variables always take precedence.
+
 ## Run
 Stream mode (no orders; uses test feed):
 

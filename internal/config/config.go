@@ -41,6 +41,8 @@ func Load() (Config, error) {
 	var symbol string
 	var feed string
 
+	loadDotEnvIfPresent(".env")
+
 	flag.StringVar(&mode, "mode", string(ModeStream), "run mode: stream or paper")
 	flag.StringVar(&symbol, "symbol", "", "trading symbol")
 	flag.StringVar(&feed, "feed", "", "market data feed: iex or test")
