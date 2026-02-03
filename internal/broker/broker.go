@@ -2,10 +2,10 @@ package broker
 
 import (
 	"context"
-	"fmt"
 	"time"
 
 	"github.com/alpacahq/alpaca-trade-api-go/v3/alpaca"
+	"github.com/shopspring/decimal"
 )
 
 type OrderRequest struct {
@@ -50,9 +50,10 @@ func New(apiKey, apiSecret, baseURL string) *Client {
 }
 
 func (c *Client) PlaceOrder(ctx context.Context, req OrderRequest) (OrderRef, error) {
+	qty := decimal.NewFromInt(int64(req.Qty))
 	orderReq := alpaca.PlaceOrderRequest{
 		Symbol:        req.Symbol,
-		Qty:           req.Qty,
+		Qty:           &qty,
 		Side:          req.Side,
 		Type:          req.Type,
 		TimeInForce:   req.TimeInForce,
@@ -60,7 +61,8 @@ func (c *Client) PlaceOrder(ctx context.Context, req OrderRequest) (OrderRef, er
 		ExtendedHours: req.ExtendedHours,
 	}
 	if req.LimitPrice != nil {
-		orderReq.LimitPrice = req.LimitPrice
+		limitPrice := decimal.NewFromFloat(*req.LimitPrice)
+		orderReq.LimitPrice = &limitPrice
 	}
 
 	order, err := c.client.PlaceOrder(orderReq)
@@ -99,18 +101,12 @@ func (c *Client) Position(ctx context.Context, symbol string) (Position, error) 
 	if err != nil {
 		return Position{}, err
 	}
-	qty, err := pos.Qty.Int64()
-	if err != nil {
-		return Position{}, fmt.Errorf("parse qty: %w", err)
-	}
-	avgEntry, err := pos.AvgEntryPrice.Float64()
-	if err != nil {
-		return Position{}, fmt.Errorf("parse avg entry: %w", err)
-	}
+	qty := int(pos.Qty.IntPart())
+	avgEntry, _ := pos.AvgEntryPrice.Float64()
 
 	return Position{
 		Symbol:   pos.Symbol,
-		Qty:      int(qty),
+		Qty:      qty,
 		AvgEntry: avgEntry,
 	}, nil
 }
@@ -120,14 +116,8 @@ func (c *Client) Account(ctx context.Context) (Account, error) {
 	if err != nil {
 		return Account{}, err
 	}
-	equity, err := acct.Equity.Float64()
-	if err != nil {
-		return Account{}, fmt.Errorf("parse equity: %w", err)
-	}
-	buyingPower, err := acct.BuyingPower.Float64()
-	if err != nil {
-		return Account{}, fmt.Errorf("parse buying power: %w", err)
-	}
+	equity, _ := acct.Equity.Float64()
+	buyingPower, _ := acct.BuyingPower.Float64()
 
 	return Account{Equity: equity, BuyingPower: buyingPower}, nil
 }

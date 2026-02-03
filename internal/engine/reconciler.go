@@ -2,11 +2,13 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"log"
 	"time"
 
 	"ats/internal/broker"
 	"ats/internal/state"
+	"github.com/alpacahq/alpaca-trade-api-go/v3/alpaca"
 )
 
 func ReconcileLoop(ctx context.Context, brokerClient *broker.Client, store *state.Store, symbol string, interval time.Duration) {
@@ -41,7 +43,12 @@ func reconcileOnce(ctx context.Context, brokerClient *broker.Client, store *stat
 
 	position, err := brokerClient.Position(ctx, symbol)
 	if err != nil {
-		log.Printf("reconcile position failed: %v", err)
+		var apiErr *alpaca.APIError
+		if errors.As(err, &apiErr) && apiErr.StatusCode == 404 {
+			store.UpdatePosition(state.Position{Qty: 0, AvgEntry: 0})
+		} else {
+			log.Printf("reconcile position failed: %v", err)
+		}
 	} else {
 		store.UpdatePosition(state.Position{Qty: position.Qty, AvgEntry: position.AvgEntry})
 	}

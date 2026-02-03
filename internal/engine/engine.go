@@ -44,13 +44,15 @@ func New(cfg config.Config, strategy strategy.Strategy, gate risk.Gate, brokerCl
 
 func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 	barTime := time.Unix(bar.Timestamp, 0).UTC()
+	log.Printf("DEBUG: OnBar called symbol=%s close=%.2f time=%s", bar.Symbol, bar.Close, barTime.Format(time.RFC3339))
 	e.buffer.Add(bar.Close)
 	e.state.SetLastBarTime(barTime)
 
 	sma, err := e.buffer.SMA(e.cfg.SMAWindow)
 	if err != nil {
-		log.Printf("bar=%s close=%.2f sma=na reason=insufficient_data", barTime.Format(time.RFC3339), bar.Close)
-		return
+		// Not enough data for SMA yet, use close price as fallback for strategies that don't need it
+		sma = bar.Close
+		log.Printf("bar=%s close=%.2f sma=na (using close as fallback)", barTime.Format(time.RFC3339), bar.Close)
 	}
 
 	snapshot := e.state.Snapshot()

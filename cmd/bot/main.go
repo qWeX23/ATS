@@ -42,7 +42,7 @@ func main() {
 	}
 
 	brokerClient := broker.New(cfg.APIKey, cfg.APISecret, cfg.PaperBaseURL)
-	strategyImpl := strategy.SMA{MaxQty: cfg.MaxQty}
+	strategyImpl := strategy.NewRandomNoise(cfg.MaxQty)
 	gate := risk.Gate{}
 	engineImpl := engine.New(cfg, strategyImpl, gate, brokerClient, store, decisions)
 
