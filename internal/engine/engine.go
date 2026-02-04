@@ -3,7 +3,7 @@ package engine
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"sync/atomic"
 	"time"
 
@@ -30,7 +30,8 @@ type Engine struct {
 }
 
 func New(cfg config.Config, strategy strategy.Strategy, gate risk.Gate, brokerClient *broker.Client, stateStore *state.Store, decisions *DecisionLogger) *Engine {
-	return &Engine{
+	slog.Info("engine initializing", "run_id", decisions.RunID(), "symbol", cfg.Symbol, "sma_window", cfg.SMAWindow, "bars_window", cfg.BarsWindow)
+	e := &Engine{
 		cfg:       cfg,
 		strategy:  strategy,
 		gate:      gate,
@@ -40,11 +41,13 @@ func New(cfg config.Config, strategy strategy.Strategy, gate risk.Gate, brokerCl
 		buffer:    md.NewRingBuffer(cfg.BarsWindow),
 		runID:     decisions.RunID(),
 	}
+	slog.Info("engine initialized", "run_id", e.runID)
+	return e
 }
 
 func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 	barTime := time.Unix(bar.Timestamp, 0).UTC()
-	log.Printf("DEBUG: OnBar called symbol=%s close=%.2f time=%s", bar.Symbol, bar.Close, barTime.Format(time.RFC3339))
+	slog.Debug("on bar", "symbol", bar.Symbol, "close", bar.Close, "time", barTime.Format(time.RFC3339))
 	e.buffer.Add(bar.Close)
 	e.state.SetLastBarTime(barTime)
 
@@ -52,7 +55,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 	if err != nil {
 		// Not enough data for SMA yet, use close price as fallback for strategies that don't need it
 		sma = bar.Close
-		log.Printf("bar=%s close=%.2f sma=na (using close as fallback)", barTime.Format(time.RFC3339), bar.Close)
+		slog.Info("sma not ready", "bar", barTime.Format(time.RFC3339), "close", bar.Close)
 	}
 
 	snapshot := e.state.Snapshot()
@@ -95,7 +98,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 		decision.Result = "rejected"
 		decision.RejectReason = err.Error()
 		e.decisions.Append(decision)
-		log.Printf("bar=%s close=%.2f sma=%.2f intent=%s reject=%s", barTime.Format(time.RFC3339), bar.Close, sma, intent.Action, err.Error())
+		slog.Info("trade rejected", "bar", barTime.Format(time.RFC3339), "close", bar.Close, "sma", sma, "intent", intent.Action, "reason", err.Error())
 		return
 	}
 
@@ -103,7 +106,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 		decision.Result = "hold"
 		decision.ApprovalReason = approved.Reason
 		e.decisions.Append(decision)
-		log.Printf("bar=%s close=%.2f sma=%.2f intent=HOLD", barTime.Format(time.RFC3339), bar.Close, sma)
+		slog.Debug("holding position", "bar", barTime.Format(time.RFC3339), "close", bar.Close, "sma", sma)
 		return
 	}
 
@@ -111,7 +114,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 		decision.Result = "dry_run"
 		decision.ApprovalReason = approved.Reason
 		e.decisions.Append(decision)
-		log.Printf("bar=%s close=%.2f sma=%.2f intent=%s dry_run", barTime.Format(time.RFC3339), bar.Close, sma, intent.Action)
+		slog.Info("dry run trade", "bar", barTime.Format(time.RFC3339), "close", bar.Close, "sma", sma, "intent", intent.Action)
 		return
 	}
 
@@ -120,7 +123,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 		decision.Result = "order_build_failed"
 		decision.RejectReason = err.Error()
 		e.decisions.Append(decision)
-		log.Printf("bar=%s close=%.2f sma=%.2f intent=%s order_build_failed=%s", barTime.Format(time.RFC3339), bar.Close, sma, intent.Action, err.Error())
+		slog.Error("order build failed", "bar", barTime.Format(time.RFC3339), "close", bar.Close, "sma", sma, "intent", intent.Action, "error", err)
 		return
 	}
 
@@ -129,7 +132,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 		decision.Result = "order_failed"
 		decision.RejectReason = err.Error()
 		e.decisions.Append(decision)
-		log.Printf("bar=%s close=%.2f sma=%.2f intent=%s order_failed=%s", barTime.Format(time.RFC3339), bar.Close, sma, intent.Action, err.Error())
+		slog.Error("order placement failed", "bar", barTime.Format(time.RFC3339), "close", bar.Close, "sma", sma, "intent", intent.Action, "error", err)
 		return
 	}
 
@@ -138,7 +141,7 @@ func (e *Engine) OnBar(ctx context.Context, bar md.Bar) {
 	decision.ClientOrderID = orderRef.ClientOrderID
 	decision.ApprovalReason = approved.Reason
 	e.decisions.Append(decision)
-	log.Printf("order_submitted symbol=%s side=%s qty=%d order_id=%s client_order_id=%s", bar.Symbol, intent.Action, intent.Qty, orderRef.ID, orderRef.ClientOrderID)
+	slog.Info("order submitted", "symbol", bar.Symbol, "side", intent.Action, "qty", intent.Qty, "order_id", orderRef.ID, "client_order_id", orderRef.ClientOrderID)
 
 	e.state.SetLastTradeTime(time.Now().UTC())
 	snapshot.OpenOrders[orderRef.ClientOrderID] = state.OpenOrder{

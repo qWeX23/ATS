@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"log"
+	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
@@ -19,31 +19,79 @@ import (
 	"ats/internal/strategy"
 )
 
+func setupLogger() {
+	// Check for JSON format (containers/prod) vs pretty text (local dev)
+	// Use LOG_FORMAT=json for JSON output, anything else for pretty text
+	format := os.Getenv("LOG_FORMAT")
+
+	var handler slog.Handler
+	if format == "json" {
+		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})
+	} else {
+		// Pretty text format for local development
+		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+			Level:       slog.LevelInfo,
+			AddSource:   false,
+			ReplaceAttr: dropTimeAttr,
+		})
+	}
+
+	logger := slog.New(handler)
+	slog.SetDefault(logger)
+}
+
+// dropTimeAttr removes the time field from text logs for cleaner local output
+func dropTimeAttr(groups []string, a slog.Attr) slog.Attr {
+	if a.Key == slog.TimeKey {
+		return slog.Attr{}
+	}
+	return a
+}
+
 func main() {
+	setupLogger()
+
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config error: %v", err)
+		slog.Error("config error", "error", err)
+		os.Exit(1)
 	}
 
 	runID := generateRunID()
+	slog.Info("generated run_id", "run_id", runID)
+
+	slog.Info("initializing decision logger", "path", cfg.DecisionsPath)
 	decisions, err := engine.NewDecisionLogger(cfg.DecisionsPath, runID)
 	if err != nil {
-		log.Fatalf("decision logger error: %v", err)
+		slog.Error("decision logger error", "error", err)
+		os.Exit(1)
 	}
+	slog.Info("decision logger initialized", "path", cfg.DecisionsPath, "run_id", runID)
 	defer func() {
 		if err := decisions.Close(); err != nil {
-			log.Printf("failed to close decision logger: %v", err)
+			slog.Error("failed to close decision logger", "error", err)
 		}
 	}()
 
 	store := state.NewStore()
 	if err := store.Load(cfg.CheckpointPath); err == nil {
-		log.Printf("loaded checkpoint from %s", cfg.CheckpointPath)
+		slog.Info("checkpoint loaded", "path", cfg.CheckpointPath)
+	} else {
+		slog.Info("no checkpoint found, starting fresh", "path", cfg.CheckpointPath)
 	}
 
+	slog.Info("initializing broker client", "base_url", cfg.PaperBaseURL)
 	brokerClient := broker.New(cfg.APIKey, cfg.APISecret, cfg.PaperBaseURL)
+
+	slog.Info("initializing strategy", "type", "RandomNoise", "max_qty", cfg.MaxQty)
 	strategyImpl := strategy.NewRandomNoise(cfg.MaxQty)
+
+	slog.Info("initializing risk gate")
 	gate := risk.Gate{}
+
+	slog.Info("creating trading engine")
 	engineImpl := engine.New(cfg, strategyImpl, gate, brokerClient, store, decisions)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -53,26 +101,31 @@ func main() {
 	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-signalChan
-		log.Printf("shutdown signal received")
+		slog.Info("shutdown signal received")
 		cancel()
 	}()
 
 	if cfg.Mode == config.ModePaper {
+		slog.Info("starting reconciliation loop", "interval", cfg.ReconcileInterval)
 		go engine.ReconcileLoop(ctx, brokerClient, store, cfg.Symbol, cfg.ReconcileInterval)
 	}
 
-	log.Printf("starting bot mode=%s symbol=%s feed=%s", cfg.Mode, cfg.Symbol, cfg.Feed)
+	slog.Info("bot starting", "mode", cfg.Mode, "symbol", cfg.Symbol, "feed", cfg.Feed, "run_id", runID)
+	slog.Info("connecting to market data", "feed", cfg.Feed, "symbol", cfg.Symbol)
 	if err := md.StartStream(ctx, cfg.APIKey, cfg.APISecret, cfg.Feed, cfg.Symbol, func(bar md.Bar) {
 		engineImpl.OnBar(ctx, bar)
 	}); err != nil && err != context.Canceled {
-		log.Printf("market data stream stopped: %v", err)
+		slog.Info("market data stream stopped", "error", err)
+	} else {
+		slog.Info("market data stream ended normally")
 	}
 
+	slog.Info("saving checkpoint before shutdown")
 	if err := store.Save(cfg.CheckpointPath); err != nil {
-		log.Printf("failed to save checkpoint: %v", err)
+		slog.Error("failed to save checkpoint", "error", err)
 	}
 
-	log.Printf("bot shutdown complete")
+	slog.Info("bot shutdown complete")
 }
 
 func generateRunID() string {

@@ -39,6 +39,12 @@ APCA_API_KEY_ID=your_key APCA_API_SECRET_KEY=your_secret \
 - `--mode` (stream|paper)
 - `--symbol` (default: FAKEPACA in stream mode, AAPL in paper mode)
 - `--feed` (default: test in stream mode, iex in paper mode)
+
+## Environment Variables
+
+- `APCA_API_KEY_ID` - Alpaca API key ID (required in paper mode)
+- `APCA_API_SECRET_KEY` - Alpaca API secret key (required in paper mode)
+- `LOG_FORMAT` - Log output format: `json` for JSON (recommended for containers/production) or omit for pretty text (local development)
 - `--bars-window` (default: 50)
 - `--sma-window` (default: 20)
 - `--max-qty` (default: 1)

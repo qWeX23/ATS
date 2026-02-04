@@ -2,6 +2,7 @@ package broker
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/alpacahq/alpaca-trade-api-go/v3/alpaca"
@@ -67,9 +68,11 @@ func (c *Client) PlaceOrder(ctx context.Context, req OrderRequest) (OrderRef, er
 
 	order, err := c.client.PlaceOrder(orderReq)
 	if err != nil {
+		slog.Error("place order failed", "side", req.Side, "symbol", req.Symbol, "qty", req.Qty, "type", req.Type, "error", err)
 		return OrderRef{}, err
 	}
 
+	slog.Info("place order success", "order_id", order.ID, "side", req.Side, "symbol", req.Symbol, "qty", req.Qty, "type", req.Type, "status", order.Status)
 	return OrderRef{
 		ID:            order.ID,
 		ClientOrderID: order.ClientOrderID,
@@ -83,8 +86,10 @@ func (c *Client) OpenOrders(ctx context.Context) ([]OrderRef, error) {
 	}
 	orders, err := c.client.GetOrders(req)
 	if err != nil {
+		slog.Error("fetch open orders failed", "error", err)
 		return nil, err
 	}
+	slog.Info("open orders fetched", "count", len(orders))
 	refs := make([]OrderRef, 0, len(orders))
 	for _, order := range orders {
 		refs = append(refs, OrderRef{
@@ -99,11 +104,13 @@ func (c *Client) OpenOrders(ctx context.Context) ([]OrderRef, error) {
 func (c *Client) Position(ctx context.Context, symbol string) (Position, error) {
 	pos, err := c.client.GetPosition(symbol)
 	if err != nil {
+		slog.Error("fetch position failed", "symbol", symbol, "error", err)
 		return Position{}, err
 	}
 	qty := int(pos.Qty.IntPart())
 	avgEntry, _ := pos.AvgEntryPrice.Float64()
 
+	slog.Info("position fetched", "symbol", symbol, "qty", qty, "avg_entry", avgEntry)
 	return Position{
 		Symbol:   pos.Symbol,
 		Qty:      qty,
@@ -114,11 +121,13 @@ func (c *Client) Position(ctx context.Context, symbol string) (Position, error) 
 func (c *Client) Account(ctx context.Context) (Account, error) {
 	acct, err := c.client.GetAccount()
 	if err != nil {
+		slog.Error("fetch account failed", "error", err)
 		return Account{}, err
 	}
 	equity, _ := acct.Equity.Float64()
 	buyingPower, _ := acct.BuyingPower.Float64()
 
+	slog.Info("account fetched", "equity", equity, "buying_power", buyingPower)
 	return Account{Equity: equity, BuyingPower: buyingPower}, nil
 }
 

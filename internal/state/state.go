@@ -2,6 +2,7 @@ package state
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"sync"
 	"time"
@@ -52,13 +53,21 @@ func (s *Store) Snapshot() Snapshot {
 func (s *Store) UpdatePosition(position Position) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	oldQty := s.snapshot.Position.Qty
 	s.snapshot.Position = position
+	if oldQty != position.Qty {
+		slog.Info("position updated", "old_qty", oldQty, "new_qty", position.Qty, "avg_entry", position.AvgEntry)
+	}
 }
 
 func (s *Store) SetOpenOrders(orders map[string]OpenOrder) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	oldCount := len(s.snapshot.OpenOrders)
 	s.snapshot.OpenOrders = orders
+	if oldCount != len(orders) {
+		slog.Info("open orders updated", "old_count", oldCount, "new_count", len(orders))
+	}
 }
 
 func (s *Store) SetLastTradeTime(t time.Time) {
@@ -78,18 +87,26 @@ func (s *Store) Save(path string) error {
 	defer s.mu.RUnlock()
 	data, err := json.MarshalIndent(s.snapshot, "", "  ")
 	if err != nil {
+		slog.Error("state save failed", "path", path, "error", err)
 		return err
 	}
-	return os.WriteFile(path, data, 0o644)
+	if err := os.WriteFile(path, data, 0o644); err != nil {
+		slog.Error("state save failed", "path", path, "error", err)
+		return err
+	}
+	slog.Info("state saved", "path", path, "position_qty", s.snapshot.Position.Qty, "open_orders", len(s.snapshot.OpenOrders))
+	return nil
 }
 
 func (s *Store) Load(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		slog.Error("state load failed", "path", path, "error", err)
 		return err
 	}
 	var snapshot Snapshot
 	if err := json.Unmarshal(data, &snapshot); err != nil {
+		slog.Error("state load failed", "path", path, "error", err)
 		return err
 	}
 	if snapshot.OpenOrders == nil {
@@ -99,5 +116,6 @@ func (s *Store) Load(path string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.snapshot = snapshot
+	slog.Info("state loaded", "path", path, "position_qty", snapshot.Position.Qty, "open_orders", len(snapshot.OpenOrders), "last_trade", snapshot.LastTradeTime.Format(time.RFC3339))
 	return nil
 }

@@ -3,7 +3,7 @@ package md
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/alpacahq/alpaca-trade-api-go/v3/marketdata"
 	"github.com/alpacahq/alpaca-trade-api-go/v3/marketdata/stream"
@@ -17,11 +17,39 @@ type Bar struct {
 
 type BarHandler func(Bar)
 
+// SDKLogger wraps slog to satisfy the Alpaca SDK's logger interface
+type SDKLogger struct{}
+
+func (l SDKLogger) Printf(format string, v ...any) {
+	slog.LogAttrs(nil, slog.LevelInfo, fmt.Sprintf(format, v...),
+		slog.String("source", "alpaca_sdk"),
+	)
+}
+
+func (l SDKLogger) Errorf(format string, v ...any) {
+	slog.LogAttrs(nil, slog.LevelError, fmt.Sprintf(format, v...),
+		slog.String("source", "alpaca_sdk"),
+	)
+}
+
+func (l SDKLogger) Infof(format string, v ...any) {
+	slog.LogAttrs(nil, slog.LevelInfo, fmt.Sprintf(format, v...),
+		slog.String("source", "alpaca_sdk"),
+	)
+}
+
+func (l SDKLogger) Warnf(format string, v ...any) {
+	slog.LogAttrs(nil, slog.LevelWarn, fmt.Sprintf(format, v...),
+		slog.String("source", "alpaca_sdk"),
+	)
+}
+
 func StartStream(ctx context.Context, apiKey, apiSecret, feed, symbol string, handler BarHandler) error {
 	feedType := parseFeed(feed)
 	client := stream.NewStocksClient(
 		feedType,
 		stream.WithCredentials(apiKey, apiSecret),
+		stream.WithLogger(&SDKLogger{}),
 	)
 
 	// Note: Connect must be called BEFORE subscribing in this SDK version
@@ -29,10 +57,10 @@ func StartStream(ctx context.Context, apiKey, apiSecret, feed, symbol string, ha
 		return fmt.Errorf("connect market data stream: %w", err)
 	}
 
-	log.Printf("DEBUG: connected to stream, subscribing to bars for symbol=%s", symbol)
+	slog.Debug("connected to stream, subscribing to bars", "symbol", symbol)
 
 	if err := client.SubscribeToBars(func(bar stream.Bar) {
-		log.Printf("DEBUG: received bar symbol=%s timestamp=%v close=%.2f", bar.Symbol, bar.Timestamp, bar.Close)
+		slog.Debug("received bar", "symbol", bar.Symbol, "timestamp", bar.Timestamp, "close", bar.Close)
 		handler(Bar{
 			Symbol:    bar.Symbol,
 			Timestamp: bar.Timestamp.Unix(),
@@ -42,7 +70,7 @@ func StartStream(ctx context.Context, apiKey, apiSecret, feed, symbol string, ha
 		return fmt.Errorf("subscribe to bars: %w", err)
 	}
 
-	log.Printf("DEBUG: subscribed to bars for symbol=%s", symbol)
+	slog.Debug("subscribed to bars", "symbol", symbol)
 
 	<-ctx.Done()
 	return ctx.Err()
