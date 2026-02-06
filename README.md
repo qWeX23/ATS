@@ -39,6 +39,8 @@ APCA_API_KEY_ID=your_key APCA_API_SECRET_KEY=your_secret \
 - `--mode` (stream|paper)
 - `--symbol` (default: FAKEPACA in stream mode, AAPL in paper mode)
 - `--feed` (default: test in stream mode, iex in paper mode)
+- `--strategy` (random_noise|mean_reversion|sma|llm)
+- `--config` (optional path to JSON config file; defaults to `./config.json` if present)
 
 ## Environment Variables
 
@@ -58,6 +60,21 @@ APCA_API_KEY_ID=your_key APCA_API_SECRET_KEY=your_secret \
 - `--decisions-path` (default: decisions.ndjson)
 - `--checkpoint-path` (default: checkpoint.json)
 - `--paper-base-url` (default: https://paper-api.alpaca.markets)
+
+## LLM configuration (environment variables)
+- `LLM_BASE_URL` (default: http://localhost:11434 for Ollama)
+- `LLM_MODEL` (required for strategy=llm)
+- `LLM_TIMEOUT` (default: 8s)
+- `LLM_CONTEXT_PROMPT` (extra context appended into the decision prompt)
+- `LLM_SYSTEM_PROMPT_PATH` (optional override for the system prompt markdown template)
+- `LLM_DECISION_PROMPT_PATH` (optional override for the decision prompt markdown template)
+
+Default prompt templates live in `internal/llm/prompts/` and can be extended by copying and
+overriding via the environment variable paths.
+
+## Configuration precedence
+Defaults → JSON config file → environment variables → CLI flags.
+CLI flags always win if provided.
 
 ## Development notes
 This repo uses a local stub of the Alpaca SDK for offline builds/tests. To use the real SDK,
