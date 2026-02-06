@@ -198,7 +198,9 @@ func TestLLMStrategyDecide_PromptTemplateError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		_ = os.Remove(tempFile.Name())
+	}()
 
 	if _, err := tempFile.WriteString("{{"); err != nil {
 		t.Fatalf("write temp: %v", err)

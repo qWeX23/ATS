@@ -31,7 +31,9 @@ func TestLoadTemplate_UsesFileOverride(t *testing.T) {
 	if err != nil {
 		t.Fatalf("temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	defer func() {
+		_ = os.Remove(tempFile.Name())
+	}()
 
 	contents := "custom prompt"
 	if _, err := tempFile.WriteString(contents); err != nil {

@@ -21,25 +21,25 @@ type BarHandler func(Bar)
 type SDKLogger struct{}
 
 func (l SDKLogger) Printf(format string, v ...any) {
-	slog.LogAttrs(nil, slog.LevelInfo, fmt.Sprintf(format, v...),
+	slog.LogAttrs(context.Background(), slog.LevelInfo, fmt.Sprintf(format, v...),
 		slog.String("source", "alpaca_sdk"),
 	)
 }
 
 func (l SDKLogger) Errorf(format string, v ...any) {
-	slog.LogAttrs(nil, slog.LevelError, fmt.Sprintf(format, v...),
+	slog.LogAttrs(context.Background(), slog.LevelError, fmt.Sprintf(format, v...),
 		slog.String("source", "alpaca_sdk"),
 	)
 }
 
 func (l SDKLogger) Infof(format string, v ...any) {
-	slog.LogAttrs(nil, slog.LevelInfo, fmt.Sprintf(format, v...),
+	slog.LogAttrs(context.Background(), slog.LevelInfo, fmt.Sprintf(format, v...),
 		slog.String("source", "alpaca_sdk"),
 	)
 }
 
 func (l SDKLogger) Warnf(format string, v ...any) {
-	slog.LogAttrs(nil, slog.LevelWarn, fmt.Sprintf(format, v...),
+	slog.LogAttrs(context.Background(), slog.LevelWarn, fmt.Sprintf(format, v...),
 		slog.String("source", "alpaca_sdk"),
 	)
 }
