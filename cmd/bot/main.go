@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,6 +14,8 @@ import (
 	"ats/internal/broker"
 	"ats/internal/config"
 	"ats/internal/engine"
+	"ats/internal/llm"
+	"ats/internal/llm/ollama"
 	"ats/internal/md"
 	"ats/internal/risk"
 	"ats/internal/state"
@@ -85,8 +88,11 @@ func main() {
 	slog.Info("initializing broker client", "base_url", cfg.PaperBaseURL)
 	brokerClient := broker.New(cfg.APIKey, cfg.APISecret, cfg.PaperBaseURL)
 
-	slog.Info("initializing strategy", "type", "RandomNoise", "max_qty", cfg.MaxQty)
-	strategyImpl := strategy.NewRandomNoise(cfg.MaxQty)
+	strategyImpl, err := buildStrategy(cfg)
+	if err != nil {
+		slog.Error("strategy error", "error", err)
+		os.Exit(1)
+	}
 
 	slog.Info("initializing risk gate")
 	gate := risk.Gate{}
@@ -135,4 +141,32 @@ func generateRunID() string {
 		return timestamp
 	}
 	return timestamp + "-" + hex.EncodeToString(randomBytes)
+}
+
+func buildStrategy(cfg config.Config) (strategy.Strategy, error) {
+	switch cfg.Strategy {
+	case "random_noise":
+		slog.Info("initializing strategy", "type", "RandomNoise", "max_qty", cfg.MaxQty)
+		return strategy.NewRandomNoise(cfg.MaxQty), nil
+	case "mean_reversion":
+		slog.Info("initializing strategy", "type", "MeanReversion", "max_qty", cfg.MaxQty)
+		return strategy.NewMeanReversion(cfg.MaxQty), nil
+	case "sma":
+		slog.Info("initializing strategy", "type", "SMA", "max_qty", cfg.MaxQty)
+		return strategy.SMA{MaxQty: cfg.MaxQty}, nil
+	case "llm":
+		slog.Info("initializing strategy", "type", "LLM", "model", cfg.LLMModel)
+		provider := ollama.New(cfg.LLMBaseURL, cfg.LLMModel)
+		client := llm.New(provider)
+		return strategy.NewLLMStrategy(
+			client,
+			cfg.MaxQty,
+			cfg.LLMSystemPromptPath,
+			cfg.LLMDecisionPromptPath,
+			cfg.LLMTimeout,
+			cfg.LLMContextPrompt,
+		), nil
+	default:
+		return nil, fmt.Errorf("unknown strategy: %s", cfg.Strategy)
+	}
 }
